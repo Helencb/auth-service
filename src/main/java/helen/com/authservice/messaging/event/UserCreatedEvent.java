@@ -1,7 +1,9 @@
 package helen.com.authservice.messaging.event;
 
+import java.util.UUID;
+
 public record UserCreatedEvent(
-        Long userId,
+        UUID userId,
         String email
 ) {
 }

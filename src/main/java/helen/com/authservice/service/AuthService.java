@@ -43,15 +43,24 @@ public class AuthService {
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         producer.publishUserLogged(
-                new UserLoggedEvent(
-                        request.email()
-                )
+                new UserLoggedEvent(request.email())
         );
 
         return new TokenResponse(accessToken, refreshToken.getToken());
     }
 
-    public RegisterResponse register(RegisterRequest request) {
+    public TokenResponse refreshToken(RefreshTokenRequest request) {
+        RefreshToken refreshToken = refreshTokenService.validateRefreshToken(request.refreshToken());
+
+        User user = refreshToken.getUser();
+
+        UserDetails  userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        String newAccessToken = jwtService.generateToken(userDetails);
+
+        return new TokenResponse(newAccessToken, refreshToken.getToken());
+    }
+
+    public TokenResponse register(RegisterRequest request) {
         if(repository.existsByEmail(request.email())) {
             throw new EmailAlreadyExistsException("Email já cadastrado");
         }
@@ -69,6 +78,16 @@ public class AuthService {
                         user.getEmail())
         );
 
-        return new RegisterResponse("Usuário cadastrado com sucesso");
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+
+        String accessToken = jwtService.generateToken(userDetails);
+
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+        return new TokenResponse(accessToken, refreshToken.getToken());
+    }
+
+    public void logout(LogoutRequest request) {
+        refreshTokenService.revokeToken(request.refreshToken());
     }
 }

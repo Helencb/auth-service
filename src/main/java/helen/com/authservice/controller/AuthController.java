@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
      private final AuthService authService;
 
     @PostMapping("/login")
@@ -21,7 +22,12 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
+    public TokenResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
+    }
+
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@RequestBody RefreshTokenRequest request) {
+        return authService.refreshToken(request);
     }
 }
