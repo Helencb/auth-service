@@ -1,0 +1,14 @@
+package helen.com.authservice.repository;
+
+import helen.com.authservice.entity.Device;
+import helen.com.authservice.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface DeviceRepository extends JpaRepository<Device, String> {
+    Optional<Device> findByFingerprint(String fingerprint);
+
+    List<Device> findByUser(User user);
+}

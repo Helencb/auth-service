@@ -1,13 +1,16 @@
 package helen.com.authservice.controller;
 
-import helen.com.authservice.dto.*;
+import helen.com.authservice.dto.request.LoginRequest;
+import helen.com.authservice.dto.request.RefreshTokenRequest;
+import helen.com.authservice.dto.request.RegisterRequest;
+import helen.com.authservice.dto.response.LoginResponse;
+import helen.com.authservice.dto.response.TokenResponse;
 import helen.com.authservice.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -16,18 +19,21 @@ public class AuthController {
 
      private final AuthService authService;
 
-    @PostMapping("/login")
-    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
-       return authService.login(request);
+    @PostMapping("/register")
+    public ResponseEntity<LoginResponse> register(
+            @RequestBody @Valid RegisterRequest request) {
+        return ResponseEntity.ok(authService.register(request));
     }
 
-    @PostMapping("/register")
-    public TokenResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(
+            @RequestBody @Valid LoginRequest request, HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(authService.login(request, httpRequest));
     }
 
     @PostMapping("/refresh")
-    public TokenResponse refresh(@RequestBody RefreshTokenRequest request) {
-        return authService.refreshToken(request);
+    public ResponseEntity<TokenResponse> refresh(
+            @RequestBody @Valid RefreshTokenRequest request) {
+        return ResponseEntity.ok(authService.refresh(request));
     }
 }

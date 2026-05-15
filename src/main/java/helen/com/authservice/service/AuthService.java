@@ -1,93 +1,133 @@
 package helen.com.authservice.service;
 
-import helen.com.authservice.dto.*;
+import helen.com.authservice.dto.request.LoginRequest;
+import helen.com.authservice.dto.request.RefreshTokenRequest;
+import helen.com.authservice.dto.request.RegisterRequest;
+import helen.com.authservice.dto.response.LoginResponse;
+import helen.com.authservice.dto.response.TokenResponse;
+import helen.com.authservice.entity.Device;
 import helen.com.authservice.entity.RefreshToken;
+import helen.com.authservice.entity.Role;
 import helen.com.authservice.entity.User;
-import helen.com.authservice.exception.EmailAlreadyExistsException;
-import helen.com.authservice.messaging.event.UserCreatedEvent;
-import helen.com.authservice.messaging.event.UserLoggedEvent;
-import helen.com.authservice.messaging.producer.AuthProducer;
+import helen.com.authservice.enums.RoleType;
+import helen.com.authservice.repository.RefreshTokenRepository;
+import helen.com.authservice.repository.RoleRepository;
 import helen.com.authservice.repository.UserRepository;
-import helen.com.authservice.security.JwtService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    private final UserRepository repository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final UserDetailsService userDetailsService;
-    private final RefreshTokenService refreshTokenService;
-    private final JwtService jwtService;
-    private final AuthProducer producer;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
 
-    public TokenResponse login(LoginRequest request) {
+    private final PasswordEncoder  passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final SessionService sessionService;
+    private final DeviceTrackingService deviceTrackingService;
+
+    private final JwtService jwtService;
+
+    @Transactional
+    public LoginResponse register(RegisterRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new RuntimeException("Username already exists");
+        }
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Email already exists");
+        }
+        Role userRole = roleRepository.findByName(RoleType.ROLE_USER)
+                .orElseThrow(() -> new RuntimeException("Role not found"));
+
+        User user = User.builder()
+                .username(request.getUsername())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .roles(Set.of(userRole))
+                .enabled(true)
+                .locked(false)
+                .build();
+        userRepository.save(user);
+
+        Device fakeDevice = Device.builder()
+                .deviceName("REGISTER")
+                .browser("REGISTER")
+                .operatingSystem("REGISTER")
+                .ipAddress("0.0.0.0")
+                .build();
+
+        return buildLoginResponse(user, fakeDevice);
+    }
+
+    public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
-                request.email(),
-                request.password()
+                request.getUsername(),
+                request.getPassword()
         ));
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.email());
-        String accessToken = jwtService.generateToken(userDetails);
-
-        User user = repository.findByEmail(request.email())
-                        .orElseThrow();
-
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
-
-        producer.publishUserLogged(
-                new UserLoggedEvent(request.email())
-        );
-
-        return new TokenResponse(accessToken, refreshToken.getToken());
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow();
+        Device device = deviceTrackingService.trackDevice(user, httpRequest);
+        return buildLoginResponse(user, device);
     }
 
-    public TokenResponse refreshToken(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenService.validateRefreshToken(request.refreshToken());
+    public TokenResponse refresh(RefreshTokenRequest request) {
+        RefreshToken storedToken = refreshTokenRepository
+                .findByToken(request.getRefreshToken())
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
 
-        User user = refreshToken.getUser();
-
-        UserDetails  userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String newAccessToken = jwtService.generateToken(userDetails);
-
-        return new TokenResponse(newAccessToken, refreshToken.getToken());
-    }
-
-    public TokenResponse register(RegisterRequest request) {
-        if(repository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException("Email já cadastrado");
+        if (storedToken.getRevoked()) {
+            throw new RuntimeException("Refresh token revoked");
         }
 
-    User user = User.builder()
-            .email(request.email())
-            .password(passwordEncoder.encode(request.password()))
-            .role("ROLE_USER")
-            .build();
-        repository.save(user);
+            User user = storedToken.getUser();
 
-        producer.publishUserCreated(
-                new UserCreatedEvent(
-                        user.getId(),
-                        user.getEmail())
-        );
+            String accessToken = jwtService.generateAccessToken(user);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+            return TokenResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(storedToken.getToken())
+                    .build();
 
-        String accessToken = jwtService.generateToken(userDetails);
-
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
-
-        return new TokenResponse(accessToken, refreshToken.getToken());
     }
 
-    public void logout(LogoutRequest request) {
-        refreshTokenService.revokeToken(request.refreshToken());
+    private LoginResponse buildLoginResponse(User user, Device device){
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshTokenValue = jwtService.generateRefreshToken(user);
+
+        RefreshToken refreshToken = RefreshToken.builder()
+                .token(refreshTokenValue)
+                .user(user)
+                .revoked(false)
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .build();
+        refreshTokenRepository.save(refreshToken);
+
+        sessionService.createSession(
+                user,
+                device,
+                accessToken,
+                refreshTokenValue
+        );
+
+        return LoginResponse.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .tokens(TokenResponse.builder()
+                        .accessToken(accessToken)
+                        .refreshToken(refreshTokenValue)
+                        .build())
+                .build();
     }
 }
