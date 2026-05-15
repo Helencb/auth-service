@@ -30,7 +30,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-
+    private final MFAService mfaService;
     private final PasswordEncoder  passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final SessionService sessionService;
@@ -77,8 +77,20 @@ public class AuthService {
 
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow();
+
+        boolean mfaEnabled = mfaService.isMFAEnabled(user);
+        if (mfaEnabled) {
+            return LoginResponse.builder()
+                    .userId(user.getId())
+                    .username(user.getUsername())
+                    .email(user.getEmail())
+                    .mfaRequired(true)
+                    .build();
+        }
         Device device = deviceTrackingService.trackDevice(user, httpRequest);
-        return buildLoginResponse(user, device);
+        LoginResponse response = buildLoginResponse(user, device);
+        response.setMfaRequired(false);
+        return response;
     }
 
     public TokenResponse refresh(RefreshTokenRequest request) {
