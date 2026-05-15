@@ -1,4 +1,13 @@
 package helen.com.authservice.dto.request;
 
-public record VerifyMFARequest() {
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+@Data
+public class VerifyMFARequest {
+    @NotBlank
+    private String username;
+
+    @NotBlank
+    private String code;
 }
