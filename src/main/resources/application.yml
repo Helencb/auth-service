@@ -22,21 +22,46 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
-  springdoc:
-    api-docs:
-      path: /v3/api-docs
-
-    swagger-ui:
-      path: /swagger-ui.html
-
   redis:
     host: localhost
     port: 6379
 
+  mail:
+    host: localhost
+    port: 1025
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:changeme}
+            client-secret: ${GOOGLE_CLIENT_SECRET:changeme}
+            scope: profile,email
+
+# springdoc is a top-level property, not under spring.* (it was misplaced there before)
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
 
 management:
   endpoints:
@@ -48,7 +73,22 @@ management:
     health:
       show-details: always
 
+# NOTE: the api-gateway (helen.com.gatewayserver) validates the JWTs issued
+# here using its OWN "security.jwt.secret" property - it does not fetch this
+# secret from auth-service. Both values must be identical or the gateway will
+# reject every token with 401. The default below matches the gateway's current
+# hardcoded default (gateway's application.yml, "security.jwt.secret") so the
+# two services work together out of the box; override JWT_SECRET (here) and
+# security.jwt.secret (in the gateway) with the same value for real environments.
 jwt:
-  secret: mySuperSecretKeyMySuperSecretKey123456
+  secret: ${JWT_SECRET:my-super-secret-key-my-super-secret-key}
   expiration: 3600000
   refresh-expiration: 604800000
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: no-reply@auth-service.local

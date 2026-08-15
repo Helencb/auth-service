@@ -4,6 +4,7 @@ import helen.com.authservice.dto.response.MFASetupResponse;
 import helen.com.authservice.entity.MFASecret;
 import helen.com.authservice.entity.User;
 import helen.com.authservice.enums.MFAType;
+import helen.com.authservice.exception.UnauthorizedException;
 import helen.com.authservice.repository.MFASecretRepository;
 import helen.com.authservice.repository.UserRepository;
 import helen.com.authservice.security.mfa.MFAValidator;
@@ -20,6 +21,7 @@ public class MFAService {
     private final TotpService totpService;
     private final QRCodeGenerator qrCodeGenerator;
     private final MFAValidator mfaValidator;
+    private final EmailService emailService;
 
     public MFASetupResponse setupMFA(String username) {
         User user = userRepository.findByUsername(username)
@@ -63,11 +65,13 @@ public class MFAService {
                         code);
 
         if (!valid) {
-            throw new RuntimeException("Invalid MFA code");
+            throw new UnauthorizedException("Invalid MFA code");
         }
 
         mfaSecret.setEnabled(true);
         mfaSecretRepository.save(mfaSecret);
+
+        emailService.sendMfaEnabledEmail(user.getEmail());
     }
 
     public boolean verifyCode(String username, String code) {

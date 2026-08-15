@@ -10,6 +10,9 @@ import helen.com.authservice.entity.RefreshToken;
 import helen.com.authservice.entity.Role;
 import helen.com.authservice.entity.User;
 import helen.com.authservice.enums.RoleType;
+import helen.com.authservice.exception.EmailAlreadyExistsException;
+import helen.com.authservice.exception.UnauthorizedException;
+import helen.com.authservice.exception.UsernameAlreadyExistsException;
 import helen.com.authservice.repository.RefreshTokenRepository;
 import helen.com.authservice.repository.RoleRepository;
 import helen.com.authservice.repository.UserRepository;
@@ -41,10 +44,10 @@ public class AuthService {
     @Transactional
     public LoginResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already exists");
+            throw new UsernameAlreadyExistsException("Username already exists");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new EmailAlreadyExistsException("Email already exists");
         }
         Role userRole = roleRepository.findByName(RoleType.ROLE_USER)
                 .orElseThrow(() -> new RuntimeException("Role not found"));
@@ -96,10 +99,10 @@ public class AuthService {
     public TokenResponse refresh(RefreshTokenRequest request) {
         RefreshToken storedToken = refreshTokenRepository
                 .findByToken(request.getRefreshToken())
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+                .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
 
         if (storedToken.getRevoked()) {
-            throw new RuntimeException("Refresh token revoked");
+            throw new UnauthorizedException("Refresh token revoked");
         }
 
             User user = storedToken.getUser();

@@ -11,8 +11,8 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(EmailAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
+    @ExceptionHandler({EmailAlreadyExistsException.class, UsernameAlreadyExistsException.class})
+    public ResponseEntity<ErrorResponse> handleAlreadyExists(RuntimeException ex) {
         ErrorResponse response =
                 new ErrorResponse(
                         false,
@@ -21,6 +21,32 @@ public class GlobalExceptionHandler {
                         LocalDateTime.now());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {
+        ErrorResponse response =
+                new ErrorResponse(
+                        false,
+                        ex.getMessage(),
+                        List.of(),
+                        LocalDateTime.now());
+        return ResponseEntity
+                .badRequest()
+                .body(response);
+    }
+
+    @ExceptionHandler({UnauthorizedException.class, TokenExpiredException.class})
+    public ResponseEntity<ErrorResponse> handleUnauthorized(RuntimeException ex) {
+        ErrorResponse response =
+                new ErrorResponse(
+                        false,
+                        ex.getMessage(),
+                        List.of(),
+                        LocalDateTime.now());
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
                 .body(response);
     }
 
